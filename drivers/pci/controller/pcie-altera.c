@@ -1211,6 +1211,9 @@ static int altera_pcie_probe(struct platform_device *pdev)
 			ret = PTR_ERR(pcie->regmap);
 			return ret;
 		}
+
+		/* enable all performance counters */
+		writel(1, (pcie->controller_base + PCIE_ALTERA_PERFMON_BASE));
 	}
 
 	bridge->sysdata = pcie;
