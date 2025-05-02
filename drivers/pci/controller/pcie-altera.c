@@ -17,6 +17,7 @@
 #include <linux/of_pci.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
+#include <linux/regmap.h>
 #include <linux/slab.h>
 
 #include "../pci.h"
@@ -97,6 +98,16 @@
 #define AGLX5_INDIRECT_SLEEP_US 1
 #define AGLX5_INDIRECT_TIMEOUT_US 1000
 
+/* Control Registers */
+#define PCIE_ALTERA_CTRL_BASE           0x0
+#define PCIE_ALTERA_CTRL_END            0x3ff
+/* Debug Registers */
+#define PCIE_ALTERA_DEBUG_BASE          0x400
+#define PCIE_ALTERA_DEBUG_END           0x7ff
+/* Performance Monitor Registers */
+#define PCIE_ALTERA_PERFMON_BASE        0x800
+#define PCIE_ALTERA_PERFMON_END         0xbff
+
 enum altera_pcie_version {
 	ALTERA_PCIE_V1 = 0,
 	ALTERA_PCIE_V2,
@@ -113,6 +124,7 @@ struct altera_pcie {
 	u8			root_bus_nr;
 	struct irq_domain	*irq_domain;
 	struct resource		bus_range;
+	struct regmap		*regmap;
 	const struct altera_pcie_data	*pcie_data;
 };
 
@@ -1095,6 +1107,49 @@ static const struct of_device_id altera_pcie_of_match[] = {
 	{},
 };
 
+static const struct regmap_range pcie_altera_regmap_range[] = {
+	regmap_reg_range(PCIE_ALTERA_CTRL_BASE, PCIE_ALTERA_CTRL_END),
+	regmap_reg_range(PCIE_ALTERA_DEBUG_BASE, PCIE_ALTERA_DEBUG_END),
+	regmap_reg_range(PCIE_ALTERA_PERFMON_BASE, PCIE_ALTERA_PERFMON_END),
+};
+
+static const struct regmap_access_table pcie_altera_access_table = {
+	.yes_ranges = pcie_altera_regmap_range,
+	.n_yes_ranges = ARRAY_SIZE(pcie_altera_regmap_range),
+};
+
+static const struct regmap_config pcie_altera_regmap_config = {
+	.reg_bits = 32,
+	.reg_stride = 4,
+	.val_bits = 32,
+	.wr_table = &pcie_altera_access_table,
+	.rd_table = &pcie_altera_access_table,
+	.max_register = PCIE_ALTERA_PERFMON_END,
+};
+
+static int indirect_bus_reg_read(void *context, unsigned int reg,
+				 unsigned int *val)
+{
+	const struct altera_pcie *pcie = context;
+
+	*val = readl((pcie->controller_base + reg));
+	return 0;
+}
+
+static int indirect_bus_reg_write(void *context, unsigned int reg,
+				  unsigned int val)
+{
+	const struct altera_pcie *pcie = context;
+
+	writel(val, (pcie->controller_base + reg));
+	return 0;
+}
+
+static const struct regmap_bus indirect_bus = {
+	.reg_write = indirect_bus_reg_write,
+	.reg_read = indirect_bus_reg_read,
+};
+
 static int altera_pcie_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1145,6 +1200,15 @@ static int altera_pcie_probe(struct platform_device *pdev)
 			pcie, pcie->pcie_data->port_irq_enable_offset, CFG_AER);
 		if (ret) {
 			dev_err(dev, "Failed to enable AER IRQ");
+			return ret;
+		}
+
+		pcie->regmap = devm_regmap_init(dev, &indirect_bus, pcie,
+			&pcie_altera_regmap_config);
+		if (IS_ERR(pcie->regmap)) {
+			dev_err(dev,
+				"Failed to initialize register regmap");
+			ret = PTR_ERR(pcie->regmap);
 			return ret;
 		}
 	}
