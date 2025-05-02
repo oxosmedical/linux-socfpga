@@ -18,6 +18,7 @@ properties:
       - altr,pcie-root-port-3.0-f-tile
       - altr,pcie-root-port-3.0-p-tile
       - altr,pcie-root-port-3.0-r-tile
+      - altr,pcie-root-port-4.0
 
   reg:
     items:
