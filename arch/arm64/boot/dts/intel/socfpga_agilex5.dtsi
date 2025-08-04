@@ -26,6 +26,11 @@
 			alignment = <0x1000>;
 			no-map;
 		};
+
+		pcie_rootport_buf: pcie-rootport-buf@9fffff000 {
+			reg = <0x00000009 0xfffff000 0x0 0x1000>;
+			no-map;
+		};
 	};
 
 	cpus {
