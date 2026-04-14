@@ -1,0 +1,170 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * EIC Design — iWave iG-RainboW-G58M, Agilex 5E with PCIe Gen3 x2 RP
+ *
+ * Source-of-truth for addresses: _artifacts/hw/bsp/eic_bsp.h (in the
+ * detector-prototype-fpga-software repo).
+ */
+#include "socfpga_agilex5.dtsi"
+#include "socfpga_agilex5_pcie_root_port.dtsi"
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	model = "EIC Design on iWave iG-RainboW-G58M (Agilex 5E)";
+	compatible = "iwave,ig58m-eic", "intel,socfpga-agilex5",
+		     "intel,socfpga-agilex";
+
+	aliases {
+		serial0 = &uart0;
+		ethernet0 = &gmac2;
+		/* GPIOCHIP_* mapping per _artifacts/hw/bsp/eic_bsp.h. */
+		gpio0 = &fmc_plus_gpio1;     /* GPIOCHIP_FMC_PLUS_GPIO1 = 0 */
+		gpio1 = &fmc_plus_gpio2;     /* GPIOCHIP_FMC_PLUS_GPIO2 = 1 */
+		gpio2 = &fmc_plus_gpio3;     /* GPIOCHIP_FMC_PLUS_GPIO3 = 2 */
+		gpio3 = &fmc_plus_gpio4;     /* GPIOCHIP_FMC_PLUS_GPIO4 = 3 */
+		gpio4 = &header_gpio1;       /* GPIOCHIP_HEADER_GPIO1   = 4 */
+		gpio5 = &header_gpio2;       /* GPIOCHIP_HEADER_GPIO2   = 5 */
+		gpio6 = &pmod_gpio;          /* GPIOCHIP_PMOD_GPIO      = 6 */
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory {
+		device_type = "memory";
+		/* filled in by U-Boot */
+		reg = <0x0 0x0 0x0 0x0>;
+	};
+
+	/* fixed-clock for FPGA-side peripherals (PIO etc.) */
+	fpga_ref_clk: ref_clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <100000000>;
+		clock-output-names = "fpga-ref-clk";
+	};
+};
+
+&soc {
+	/*
+	 * GPIO subsystem at the rebased 0x21000xxx base.
+	 * BSP: GPIO_SUBSYS_BASE = LWHPS2FPGA + 0x01000000 = 0x21000000.
+	 * Sub-offsets and pin counts from eic_bsp.h.
+	 */
+	fmc_plus_gpio2: gpio@21000000 {
+		compatible = "altr,pio-1.0";
+		reg = <0x21000000 0x20>;
+		clocks = <&fpga_ref_clk>;
+		altr,gpio-bank-width = <32>;
+		#gpio-cells = <2>;
+		gpio-controller;
+	};
+	pmod_gpio: gpio@21000020 {
+		compatible = "altr,pio-1.0";
+		reg = <0x21000020 0x20>;
+		clocks = <&fpga_ref_clk>;
+		altr,gpio-bank-width = <8>;
+		#gpio-cells = <2>;
+		gpio-controller;
+	};
+	header_gpio2: gpio@21000040 {
+		compatible = "altr,pio-1.0";
+		reg = <0x21000040 0x20>;
+		clocks = <&fpga_ref_clk>;
+		altr,gpio-bank-width = <21>;
+		#gpio-cells = <2>;
+		gpio-controller;
+	};
+	header_gpio1: gpio@21000060 {
+		compatible = "altr,pio-1.0";
+		reg = <0x21000060 0x20>;
+		clocks = <&fpga_ref_clk>;
+		altr,gpio-bank-width = <18>;
+		#gpio-cells = <2>;
+		gpio-controller;
+	};
+	fmc_plus_gpio4: gpio@21000080 {
+		compatible = "altr,pio-1.0";
+		reg = <0x21000080 0x20>;
+		clocks = <&fpga_ref_clk>;
+		altr,gpio-bank-width = <29>;
+		#gpio-cells = <2>;
+		gpio-controller;
+	};
+	fmc_plus_gpio3: gpio@210000a0 {
+		compatible = "altr,pio-1.0";
+		reg = <0x210000a0 0x20>;
+		clocks = <&fpga_ref_clk>;
+		altr,gpio-bank-width = <32>;
+		#gpio-cells = <2>;
+		gpio-controller;
+	};
+	fmc_plus_gpio1: gpio@210000c0 {
+		compatible = "altr,pio-1.0";
+		reg = <0x210000c0 0x20>;
+		clocks = <&fpga_ref_clk>;
+		altr,gpio-bank-width = <32>;
+		#gpio-cells = <2>;
+		gpio-controller;
+	};
+	gpio_board_config: gpio@210000e0 {
+		compatible = "altr,pio-1.0";
+		reg = <0x210000e0 0x20>;
+		clocks = <&fpga_ref_clk>;
+		altr,gpio-bank-width = <8>;
+		#gpio-cells = <2>;
+		gpio-controller;
+	};
+};
+
+/*
+ * PCIe RP — overriding the upstream-style template node that comes from
+ * socfpga_agilex5_pcie_root_port.dtsi (Intel patch 0002).
+ */
+&pcie_0_pcie_aglx {
+	/*
+	 * Two reg apertures by name. Hip reg-name is intentionally omitted;
+	 * our v4 driver patch aliases hip_base = cra_base in that case.
+	 * The MCDMA user_csr_lite hosts both functional regions in one
+	 * 64 KB aperture in our Qsys integration.
+	 */
+	reg = <0x0 0x20200000 0x0 0x00001000>,    /* Txs — LWHPS2FPGA, 4 KB */
+	      <0x5 0x10000000 0x0 0x00010000>;    /* Cra — H2F-high, 64 KB */
+	reg-names = "Txs", "Cra";
+
+	/*
+	 * Memory window: 256 MB at HPS 0x05_0000_0000 (PCIE_H2F_AVMM_BASE).
+	 * Programmed into the address-span extender's window.
+	 */
+	ranges = <0x82000000 0x0 0x00000000   /* PCI mem32, BAR offset 0 */
+		  0x5 0x00000000              /* HPS-side base */
+		  0x0 0x10000000>;             /* size 256 MB */
+
+	/*
+	 * RP / config_timeout / AER IRQ.
+	 * GIC SPI 21 = f2h_irq0[4], per eic_bsp.h PCIE_HIP_GIC_SPI.
+	 */
+	interrupts = <GIC_SPI 21 IRQ_TYPE_LEVEL_HIGH>;
+
+	/* No reset-gpios — PERST is FPGA-internal (rst_ctrl). */
+
+	bus-range = <0x00 0x0f>;
+	status = "okay";
+};
+
+&pcie_0_msi_irq {
+	/*
+	 * msi_to_gic_gen apertures from BSP. Aggregated single-line MSI
+	 * topology, 32 vectors. Mainline pcie-altera-msi binds via
+	 * altr,msi-1.0 — register layout is compatible.
+	 *
+	 * GIC SPI 20 = f2h_irq0[3], per eic_bsp.h PCIE_MSI_GIC_SPI.
+	 */
+	reg = <0x0 0x20204100 0x0 0x10>,         /* csr */
+	      <0x0 0x20204000 0x0 0x80>;         /* vector_slave */
+	reg-names = "csr", "vector_slave";
+	num-vectors = <0x20>;                     /* 32 vectors */
+	interrupts = <GIC_SPI 20 IRQ_TYPE_LEVEL_HIGH>;
+	status = "okay";
+};
