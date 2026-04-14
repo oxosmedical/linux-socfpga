@@ -27,8 +27,19 @@
 			no-map;
 		};
 
-		pcie_rootport_buf: pcie-rootport-buf@9fffff000 {
-			reg = <0x00000009 0xfffff000 0x0 0x1000>;
+		/*
+		 * MSI-ordering dummy-write target. Intel reference design uses
+		 * 0x9_FFFF_F000 (top of premium devkit's 32 GB DRAM); on the
+		 * iWave iG-RainboW-G58M with 2 GB HPS DRAM, that address is
+		 * unmapped and any MSI write would be lost. Rebased to the top
+		 * 4 KB of HPS DRAM (0x80000000-0xFFFFFFFF window).
+		 *
+		 * NOTE: also requires the FPGA bitstream's
+		 * msi_ordering_csr_vector_addr tie-off to be retied from
+		 * 36'h9_FFFF_F000 to 36'h0_FFFF_F000.
+		 */
+		pcie_rootport_buf: pcie-rootport-buf@fffff000 {
+			reg = <0x00000000 0xfffff000 0x0 0x1000>;
 			no-map;
 		};
 	};
