@@ -1005,11 +1005,28 @@ static int altera_pcie_parse_dt(struct altera_pcie *pcie)
 		return PTR_ERR(pcie->cra_base);
 
 	if (pcie->pcie_data->version == ALTERA_PCIE_V2 ||
-	    pcie->pcie_data->version == ALTERA_PCIE_V3 ||
-	    pcie->pcie_data->version == ALTERA_PCIE_V4) {
+	    pcie->pcie_data->version == ALTERA_PCIE_V3) {
 		pcie->hip_base = devm_platform_ioremap_resource_byname(pdev, "Hip");
 		if (IS_ERR(pcie->hip_base))
 			return PTR_ERR(pcie->hip_base);
+	} else if (pcie->pcie_data->version == ALTERA_PCIE_V4) {
+		/*
+		 * V4 (Agilex 5 GTS): "Hip" reg is optional. When the platform
+		 * does not declare a separate "Hip" aperture, both Cra and Hip
+		 * functional regions live inside the same MCDMA user_csr_lite
+		 * aperture (e.g. iWave iG58M / OXOS EIC design). Alias hip_base
+		 * to cra_base in that case.
+		 */
+		struct resource *res;
+
+		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "Hip");
+		if (res) {
+			pcie->hip_base = devm_ioremap_resource(&pdev->dev, res);
+			if (IS_ERR(pcie->hip_base))
+				return PTR_ERR(pcie->hip_base);
+		} else {
+			pcie->hip_base = pcie->cra_base;
+		}
 	}
 
 	if (pcie->pcie_data->version == ALTERA_PCIE_V4) {
