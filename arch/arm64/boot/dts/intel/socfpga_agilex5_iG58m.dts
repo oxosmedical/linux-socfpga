@@ -123,18 +123,24 @@
  * socfpga_agilex5_pcie_root_port.dtsi (Intel patch 0002).
  */
 /*
- * Extend &soc's ranges to alias the HPS2FPGA-high PCIe Cra aperture
- * (0x5_10000000, beyond 32 bits) into a child-address window inside
- * &soc's 32-bit space. &soc uses #address-cells=<1> #size-cells=<1>
- * so all its children's reg tuples must be 1-cell addr + 1-cell size.
+ * Extend &soc's ranges to alias the HPS2FPGA-high PCIe apertures
+ * (0x5_00000000 for PCIe mem, 0x5_10000000 for Cra — both beyond
+ * 32 bits) into child-address windows inside &soc's 32-bit space.
  *
- * Existing soc ranges: <0 0 0 0xffffffff> (4 GB identity map at base
- * 0x0_00000000). We add a second entry mapping soc child-addr
- * 0xD0000000 -> parent 0x5_10000000 (PCIE_USRHIP_CSR_BASE, 64 KB).
+ * &soc uses #address-cells=<1> #size-cells=<1> so all its children's
+ * reg tuples must be 1-cell addr + 1-cell size.
+ *
+ * Aliases must avoid DRAM (0x80000000-0xFFFFFFFF). We park them in the
+ * HPS2FPGA-low aperture range (0x40000000-0x7FFFFFFF), which is free
+ * of any Linux memory claim on this SOM.
+ *
+ * Ordering matters: first-match wins in of_translate_one, so the
+ * specific aliases are listed BEFORE the 4 GB identity fallback.
  */
 &soc {
-	ranges = <0x00000000 0x0 0x00000000 0xffffffff>,
-		 <0xd0000000 0x5 0x10000000 0x10000>;
+	ranges = <0x60000000 0x5 0x00000000 0x10000000>, /* 256 MB PCIe mem -> 0x5_00000000 */
+		 <0x70000000 0x5 0x10000000 0x00010000>, /* 64 KB PCIe Cra -> 0x5_10000000 */
+		 <0x00000000 0x0 0x00000000 0xffffffff>; /* 4 GB identity fallback */
 };
 
 &pcie_0_pcie_aglx {
@@ -143,19 +149,21 @@
 	 * our v4 driver patch aliases hip_base = cra_base in that case.
 	 * The MCDMA user_csr_lite hosts both functional regions in one
 	 * 64 KB aperture in our Qsys integration.
+	 *
+	 * reg uses &soc's cell counts (1-cell addr + 1-cell size).
 	 */
 	reg = <0x20200000 0x00001000>,    /* Txs — LWHPS2FPGA, 4 KB */
-	      <0xd0000000 0x00010000>;    /* Cra — aliased to 0x5_10000000 */
+	      <0x70000000 0x00010000>;    /* Cra — aliased to 0x5_10000000 */
 	reg-names = "Txs", "Cra";
 
 	/*
-	 * Memory window: 256 MB at HPS 0x05_0000_0000 (PCIE_H2F_AVMM_BASE).
-	 * PCI ranges format: <pci-child parent size>. Parent is in /'s
-	 * 2-cell space (soc's ranges don't apply here — ranges is this
-	 * node's own property describing its children).
+	 * Memory window: 256 MB at HPS 0x05_0000_0000 (PCIE_H2F_AVMM_BASE),
+	 * exposed to PCI via &soc alias at bus addr 0x60000000.
+	 *
+	 * ranges cell counts: pci-addr(3) + parent-bus-addr(1, &soc) + size(2) = 6 cells.
 	 */
 	ranges = <0x82000000 0x0 0x00000000   /* PCI mem32, BAR offset 0 */
-		  0x5 0x00000000              /* HPS-side base */
+		  0x60000000                    /* soc-aliased parent addr */
 		  0x0 0x10000000>;             /* size 256 MB */
 
 	/*
