@@ -122,6 +122,21 @@
  * PCIe RP — overriding the upstream-style template node that comes from
  * socfpga_agilex5_pcie_root_port.dtsi (Intel patch 0002).
  */
+/*
+ * Extend &soc's ranges to alias the HPS2FPGA-high PCIe Cra aperture
+ * (0x5_10000000, beyond 32 bits) into a child-address window inside
+ * &soc's 32-bit space. &soc uses #address-cells=<1> #size-cells=<1>
+ * so all its children's reg tuples must be 1-cell addr + 1-cell size.
+ *
+ * Existing soc ranges: <0 0 0 0xffffffff> (4 GB identity map at base
+ * 0x0_00000000). We add a second entry mapping soc child-addr
+ * 0xD0000000 -> parent 0x5_10000000 (PCIE_USRHIP_CSR_BASE, 64 KB).
+ */
+&soc {
+	ranges = <0x00000000 0x0 0x00000000 0xffffffff>,
+		 <0xd0000000 0x5 0x10000000 0x10000>;
+};
+
 &pcie_0_pcie_aglx {
 	/*
 	 * Two reg apertures by name. Hip reg-name is intentionally omitted;
@@ -129,13 +144,15 @@
 	 * The MCDMA user_csr_lite hosts both functional regions in one
 	 * 64 KB aperture in our Qsys integration.
 	 */
-	reg = <0x0 0x20200000 0x0 0x00001000>,    /* Txs — LWHPS2FPGA, 4 KB */
-	      <0x5 0x10000000 0x0 0x00010000>;    /* Cra — H2F-high, 64 KB */
+	reg = <0x20200000 0x00001000>,    /* Txs — LWHPS2FPGA, 4 KB */
+	      <0xd0000000 0x00010000>;    /* Cra — aliased to 0x5_10000000 */
 	reg-names = "Txs", "Cra";
 
 	/*
 	 * Memory window: 256 MB at HPS 0x05_0000_0000 (PCIE_H2F_AVMM_BASE).
-	 * Programmed into the address-span extender's window.
+	 * PCI ranges format: <pci-child parent size>. Parent is in /'s
+	 * 2-cell space (soc's ranges don't apply here — ranges is this
+	 * node's own property describing its children).
 	 */
 	ranges = <0x82000000 0x0 0x00000000   /* PCI mem32, BAR offset 0 */
 		  0x5 0x00000000              /* HPS-side base */
@@ -161,10 +178,10 @@
 	 *
 	 * GIC SPI 20 = f2h_irq0[3], per eic_bsp.h PCIE_MSI_GIC_SPI.
 	 */
-	reg = <0x0 0x20204100 0x0 0x10>,         /* csr */
-	      <0x0 0x20204000 0x0 0x80>;         /* vector_slave */
+	reg = <0x20204100 0x10>,         /* csr */
+	      <0x20204000 0x80>;         /* vector_slave */
 	reg-names = "csr", "vector_slave";
-	num-vectors = <0x20>;                     /* 32 vectors */
+	num-vectors = <0x20>;             /* 32 vectors */
 	interrupts = <GIC_SPI 20 IRQ_TYPE_LEVEL_HIGH>;
 	status = "okay";
 };
